@@ -1,0 +1,9 @@
+# dependencies
+functions/node_modules
+
+# logs
+npm-debug.log
+
+# Firebase
+firebase.json
+database.rules.json
