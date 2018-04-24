@@ -6,10 +6,17 @@ const _ = require('lodash');
 admin.initializeApp();
 
 const db = admin.database()
+const endpoint = '/participants_test'
 
 
 function updateFirebase(data) {
-  return db.ref('/participants_test').child(data.properties.deviceId).set(data);
+  if (data.properties.longitude) {
+    return db.ref(endpoint)
+      .child(data.properties.deviceId)
+      .set(data);
+  } else {
+    return {}
+  }
 }
 
 function addToBigquery(data) {
@@ -42,22 +49,32 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
     snr: maxSNR,
   };
 
-  let geojson = {
-    type: 'Feature',
-    geometry: {
-      type: 'Point',
-      coordinates: [
-        payload.longitude,
-        payload.latitude
-      ]
-    },
-    properties: payload
-  };
+  payload = JSON.parse(JSON.stringify(payload));
 
-  return Promise.all([
-    updateFirebase(geojson),
-    addToBigquery(payload)
-  ]).then(() => {
-    return res.status(200).send(rawData);
+  db.ref(endpoint).child(deviceId).once("value", function(data) {
+    let longitude = payload.longitude;
+    let latitude = payload.latitude;
+    let lastData = data.val()
+
+    if (status === 205 && lastData) {
+      longitude = lastData.properties.longitude;
+      latitude = lastData.properties.latitude;
+    }
+
+    let geojson = {
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [longitude, latitude]
+      },
+      properties: payload
+    };
+
+    return Promise.all([
+      updateFirebase(geojson),
+      addToBigquery(payload)
+    ]).then(() => {
+      return res.status(200).send(rawData);
+    });
   });
 });
