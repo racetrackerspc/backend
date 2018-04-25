@@ -74,7 +74,7 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
       updateFirebase(geojson),
       addToBigquery(payload)
     ]).then(() => {
-      return res.status(200).send(rawData);
+      return res.status(200).send({ status: 'OK' });
     });
   });
 });
