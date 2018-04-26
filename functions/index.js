@@ -11,11 +11,9 @@ const endpoint = '/participants_test'
 
 function updateFirebase(data) {
   if (data.properties.longitude) {
-    return db.ref(endpoint)
-      .child(data.properties.deviceId)
-      .set(data);
+    return db.ref(endpoint).child(data.properties.deviceId).set(data);
   } else {
-    return {}
+    return null
   }
 }
 
@@ -26,8 +24,15 @@ function addToBigquery(data) {
   return table.insert(data);
 }
 
+function sameLocation(oldPayload, newPayload) {
+  return (oldPayload.longitude === newPayload.longitude) &&
+         (oldPayload.latitude === newPayload.latitude);
+}
+
 exports.saveDeviceData = functions.https.onRequest((req, res) => {
   const rawData = req.body;
+
+  console.log('saveDeviceData', rawData);
 
   let deviceId = rawData.dev_id;
   let status = rawData.payload_fields.status;
@@ -51,21 +56,31 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
 
   payload = JSON.parse(JSON.stringify(payload));
 
-  db.ref(endpoint).child(deviceId).once("value", function(data) {
-    let longitude = payload.longitude;
-    let latitude = payload.latitude;
-    let lastData = data.val()
+  db.ref(endpoint).child(deviceId).once("value", data => {
+    let oldGeojson = data.val();
 
-    if (status === 205 && lastData) {
-      longitude = lastData.properties.longitude;
-      latitude = lastData.properties.latitude;
+    if (oldGeojson) {
+      let oldPayload = oldGeojson.properties;
+
+      if (status === 205) {
+        payload.longitude = oldPayload.longitude;
+        payload.latitude = oldPayload.latitude;
+        payload.lastMove = oldPayload.timestamp;
+
+      } else if (status === 204) {
+        if (sameLocation(oldPayload, payload)) {
+          payload.lastMove = oldPayload.timestamp;
+        } else {
+          payload.lastMove = payload.timestamp;
+        }
+      }
     }
 
     let geojson = {
       type: 'Feature',
       geometry: {
         type: 'Point',
-        coordinates: [longitude, latitude]
+        coordinates: [payload.longitude, payload.latitude]
       },
       properties: payload
     };
@@ -73,8 +88,7 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
     return Promise.all([
       updateFirebase(geojson),
       addToBigquery(payload)
-    ]).then(() => {
-      return res.status(200).send({ status: 'OK' });
+    ]).then(() => { return res.status(200).send({ status: 'OK' });
     });
   });
 });
