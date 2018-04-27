@@ -62,7 +62,7 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
     if (oldGeojson) {
       let oldPayload = oldGeojson.properties;
 
-      if (status === 205) {
+      if ((status === 205) || (status === 207)) {
         payload.longitude = oldPayload.longitude;
         payload.latitude = oldPayload.latitude;
         payload.lastMove = oldPayload.timestamp;
