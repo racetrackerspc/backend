@@ -1,12 +1,21 @@
+
 const functions = require('firebase-functions');
 const bigquery = require('@google-cloud/bigquery')();
 const admin = require('firebase-admin');
-const _ = require('lodash');
+const gcs = require('@google-cloud/storage')();
 
 admin.initializeApp();
 
-const db = admin.database()
-const endpoint = '/participants_test'
+const tj = require('@mapbox/togeojson');
+const _ = require('lodash');
+
+const DOMParser = require('xmldom').DOMParser;
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+const endpoint = '/participants_test';
+const db = admin.database();
 
 
 function updateFirebase(data) {
@@ -91,4 +100,42 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
     ]).then(() => { return res.status(200).send({ status: 'OK' });
     });
   });
+});
+
+
+exports.generateGeoJSON = functions.storage.object().onFinalize((object) => {
+  const contentType = object.contentType;
+  const fileBucket = object.bucket;
+  const filePath = object.name;
+  const fileName = path.basename(filePath);
+
+  if (!fileName.endsWith('.gpx')) {
+    console.log(`'${fileName}' is not a GPX file.`);
+    return null;
+  }
+
+  const tempFilePath = path.join(os.tmpdir(), fileName);
+  const metadata = { contentType: contentType };
+  const bucket = gcs.bucket(fileBucket);
+
+  return bucket.file(filePath).download({
+    destination: tempFilePath
+  }).then(() => {
+    console.log('GPX file downloaded locally to', tempFilePath);
+
+    let gpx = new DOMParser().parseFromString(fs.readFileSync(tempFilePath, 'utf8'));
+    let geo = tj.gpx(gpx);
+
+    return fs.writeFileSync(tempFilePath, JSON.stringify(geo));
+  }).then(() => {
+    const geoJSONfileName = _.replace(fileName, '.gpx', '.geojson');
+    const geoJSONfilePath = path.join(path.dirname(filePath), geoJSONfileName);
+
+    console.log('GeoJSON file created at', geoJSONfilePath);
+
+    return bucket.upload(tempFilePath, {
+      destination: geoJSONfilePath,
+      metadata: metadata
+    });
+  }).then(() => fs.unlinkSync(tempFilePath));
 });
