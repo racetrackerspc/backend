@@ -6,5 +6,6 @@ npm-debug.log
 
 # Firebase
 firebase.json
+firebase-debug.log
 database.rules.json
 functions/.runtimeconfig.json
