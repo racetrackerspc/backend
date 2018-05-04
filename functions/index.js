@@ -8,6 +8,7 @@ admin.initializeApp();
 const nearestPointOnLine = require('@turf/nearest-point-on-line').default;
 const tj = require('@mapbox/togeojson');
 const _ = {
+  isEmpty: require('lodash.isempty'),
   map: require('lodash.map')
 };
 
@@ -60,6 +61,10 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
   const rawData = req.body;
 
   console.log('saveDeviceData', rawData);
+
+  if (_.isEmpty(rawData)) {
+    return res.status(400).send({ status: 'Body cannot be empty' });
+  }
 
   let deviceId = rawData.dev_id;
   let status = rawData.payload_fields.status;
@@ -116,7 +121,7 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
       updateFirebase(geojson),
       addToBigquery(payload)
     ])
-    .then(() =>  res.status(200).send({ status: 'OK' }));
+    .then(() => res.status(200).send({ status: 'OK' }));
   });
 });
 

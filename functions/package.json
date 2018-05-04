@@ -16,6 +16,7 @@
     "@turf/nearest-point-on-line": "^6.0.2",
     "firebase-admin": "~5.12.0",
     "firebase-functions": "^1.0.2",
+    "lodash.isempty": "^4.4.0",
     "lodash.map": "^4.6.0",
     "xmldom": "^0.1.27"
   },
