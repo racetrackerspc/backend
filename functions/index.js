@@ -7,7 +7,9 @@ admin.initializeApp();
 
 const nearestPointOnLine = require('@turf/nearest-point-on-line').default;
 const tj = require('@mapbox/togeojson');
-const _ = require('lodash');
+const _ = {
+  map: require('lodash.map')
+};
 
 const DOMParser = require('xmldom').DOMParser;
 const path = require('path');
@@ -128,7 +130,7 @@ exports.updateLeaderboard = functions.https.onRequest((req, res) => {
 
   let participants;
 
-  db.ref(config.paths.participants)
+  return db.ref(config.paths.participants)
   .once('value', data => participants = data.val())
   .then(() => {
     if (!raceTrack) {
@@ -138,7 +140,7 @@ exports.updateLeaderboard = functions.https.onRequest((req, res) => {
       .then(() => fs.unlinkSync(tempFilePath));
     }
     console.log(`"${fileName}" already loaded`);
-    return;
+    return null;
   })
   .then(() => snapParticipants(participants))
   .then(leaderboard => db.ref(config.paths.leaderboard).set(leaderboard))
