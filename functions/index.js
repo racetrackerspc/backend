@@ -30,6 +30,7 @@ function updateFirebase(data) {
   return null;
 }
 
+
 function addToBigquery(data) {
   const dataset = bigquery.dataset(config.bigquery.datasetname);
   const table = dataset.table(config.bigquery.tablename);
@@ -37,9 +38,23 @@ function addToBigquery(data) {
   return table.insert(data);
 }
 
+
 function sameLocation(oldPayload, newPayload) {
   return (oldPayload.longitude === newPayload.longitude) &&
          (oldPayload.latitude === newPayload.latitude);
+}
+
+
+function loadRaceTrack(filePath) {
+  const fileName = path.basename(filePath);
+  const tempFilePath = path.join(os.tmpdir(), fileName);
+  const bucket = admin.storage().bucket();
+
+  console.log(`loadRaceTrack "${fileName}"`);
+
+  return bucket.file(filePath).download({ destination: tempFilePath })
+    .then(() => raceTrack = JSON.parse(fs.readFileSync(tempFilePath, 'utf8')))
+    .then(() => fs.unlinkSync(tempFilePath));
 }
 
 
@@ -128,25 +143,15 @@ exports.saveDeviceData = functions.https.onRequest((req, res) => {
 
 exports.updateLeaderboard = functions.https.onRequest((req, res) => {
   const filePath = req.body.filePath;
-  const fileName = path.basename(filePath);
-
-  const tempFilePath = path.join(os.tmpdir(), fileName);
-  const bucket = admin.storage().bucket();
-
   let participants;
+
+  if (!filePath) {
+    return res.status(400).send({ status: 'filePath cannot be empty' });
+  }
 
   return db.ref(config.paths.participants)
   .once('value', data => participants = data.val())
-  .then(() => {
-    if (!raceTrack) {
-      console.log(`Loading "${fileName}"`);
-      return bucket.file(filePath).download({ destination: tempFilePath })
-      .then(() => raceTrack = JSON.parse(fs.readFileSync(tempFilePath, 'utf8')))
-      .then(() => fs.unlinkSync(tempFilePath));
-    }
-    console.log(`"${fileName}" already loaded`);
-    return null;
-  })
+  .then(() => raceTrack || loadRaceTrack(filePath))
   .then(() => snapParticipants(participants))
   .then(leaderboard => db.ref(config.paths.leaderboard).set(leaderboard))
   .then(() => res.status(200).send({ status: 'OK' }));
