@@ -72,72 +72,72 @@ function snapParticipants(participants) {
 }
 
 
+function createFeaturePoint(payload, lastFeaturePoint) {
+  if (lastFeaturePoint) {
+    let lastPayload = lastFeaturePoint.properties;
+    let status = payload.status;
+
+    if ([205, 207].includes(status)) {
+      payload.longitude = lastPayload.longitude;
+      payload.latitude = lastPayload.latitude;
+      payload.lastMove = lastPayload.timestamp;
+
+    } else if (status === 204) {
+      if (sameLocation(lastPayload, payload)) {
+        payload.lastMove = lastPayload.timestamp;
+      } else {
+        payload.lastMove = payload.timestamp;
+      }
+    }
+  }
+
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'Point',
+      coordinates: [payload.longitude, payload.latitude]
+    },
+    properties: payload
+  };
+}
+
+
 exports.saveDeviceData = functions.https.onRequest((req, res) => {
-  const rawData = req.body;
+  console.log('saveDeviceData', req.body);
 
-  console.log('saveDeviceData', rawData);
-
-  if (_.isEmpty(rawData)) {
+  if (_.isEmpty(req.body)) {
     return res.status(400).send({ status: 'Body cannot be empty' });
   }
 
-  let deviceId = rawData.dev_id;
-  let status = rawData.payload_fields.status;
+  let maxRSSI = Math.max(_.map(req.body.metadata.gateways, 'rssi'));
+  let maxSNR = Math.max(_.map(req.body.metadata.gateways, 'snr'));
 
-  let maxRSSI = Math.max(_.map(rawData.metadata.gateways, 'rssi'));
-  let maxSNR = Math.max(_.map(rawData.metadata.gateways, 'snr'));
-
+  let deviceId = req.body.dev_id;
   let payload = {
-    temperature: rawData.payload_fields.temperature,
-    timestamp: rawData.metadata.time,
-    longitude: rawData.payload_fields.longitude,
-    latitude: rawData.payload_fields.latitude,
-    altitude: rawData.payload_fields.altitude,
-    deviceId: rawData.dev_id,
-    battery: rawData.payload_fields.battery,
-    status: rawData.payload_fields.status,
-    nsat: rawData.payload_fields.nsat,
+    temperature: req.body.payload_fields.temperature,
+    timestamp: req.body.metadata.time,
+    longitude: req.body.payload_fields.longitude,
+    latitude: req.body.payload_fields.latitude,
+    altitude: req.body.payload_fields.altitude,
+    deviceId: req.body.dev_id,
+    battery: req.body.payload_fields.battery,
+    status: req.body.payload_fields.status,
+    nsat: req.body.payload_fields.nsat,
     rssi: maxRSSI,
     snr: maxSNR,
   };
 
+  let lastFeaturePoint;
+  let featurePoint;
+
   payload = JSON.parse(JSON.stringify(payload));
 
-  db.ref(config.paths.participants).child(deviceId).once('value', data => {
-    let oldGeojson = data.val();
-
-    if (oldGeojson) {
-      let oldPayload = oldGeojson.properties;
-
-      if ((status === 205) || (status === 207)) {
-        payload.longitude = oldPayload.longitude;
-        payload.latitude = oldPayload.latitude;
-        payload.lastMove = oldPayload.timestamp;
-
-      } else if (status === 204) {
-        if (sameLocation(oldPayload, payload)) {
-          payload.lastMove = oldPayload.timestamp;
-        } else {
-          payload.lastMove = payload.timestamp;
-        }
-      }
-    }
-
-    let geojson = {
-      type: 'Feature',
-      geometry: {
-        type: 'Point',
-        coordinates: [payload.longitude, payload.latitude]
-      },
-      properties: payload
-    };
-
-    return Promise.all([
-      updateFirebase(geojson),
-      addToBigquery(payload)
-    ])
-    .then(() => res.status(200).send({ status: 'OK' }));
-  });
+  return db.ref(config.paths.participants).child(deviceId)
+    .once('value', data => lastFeaturePoint = data.val())
+  .then(() => featurePoint = createFeaturePoint(payload, lastFeaturePoint))
+  .then(() => updateFirebase(featurePoint))
+  .then(() => addToBigquery(featurePoint.properties))
+  .then(() => res.status(200).send({ status: 'OK' }));
 });
 
 
@@ -150,7 +150,7 @@ exports.updateLeaderboard = functions.https.onRequest((req, res) => {
   }
 
   return db.ref(config.paths.participants)
-  .once('value', data => participants = data.val())
+    .once('value', data => participants = data.val())
   .then(() => raceTrack || loadRaceTrack(filePath))
   .then(() => snapParticipants(participants))
   .then(leaderboard => db.ref(config.paths.leaderboard).set(leaderboard))
