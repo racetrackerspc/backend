@@ -20,6 +20,8 @@ const os = require('os');
 const config = functions.config();
 const db = admin.database();
 
+const SNAP_DISTANCE_THRESHOLD = 0.5
+
 let raceTrack;
 
 
@@ -63,8 +65,12 @@ function snapParticipants(participants) {
 
   for (const id in participants) {
     let snap = nearestPointOnLine(raceTrack, participants[id]);
-    snap.properties.location *= -1
 
+    if (snap.properties.dist > SNAP_DISTANCE_THRESHOLD) {
+      continue;
+    }
+
+    snap.properties.location *= -1
     Object.assign(snap.properties, participants[id].properties);
     leaderboard[id] = snap;
   }
