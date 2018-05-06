@@ -63,6 +63,7 @@ function snapParticipants(participants) {
 
   for (const id in participants) {
     let snap = nearestPointOnLine(raceTrack, participants[id]);
+    snap.properties.location *= -1
 
     Object.assign(snap.properties, participants[id].properties);
     leaderboard[id] = snap;
