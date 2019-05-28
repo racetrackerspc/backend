@@ -1,4 +1,4 @@
-# Racetracker Backend
+# Racetracker backend
 Firebase backend for the race tracker
 
 Exports an endpoint that recieves the updates from the participants, cleans the data and stores it into Firebase (for realtime visualization) and BigQuery (for deeper analysis). 
